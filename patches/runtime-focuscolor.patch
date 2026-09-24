@@ -1,0 +1,118 @@
+--- a/config.def.h
++++ b/config.def.h
+@@ -17,7 +17,8 @@
+ static const unsigned int snap             = 32; /* snap pixel */
+ static const float rootcolor[]             = COLOR(0x222222ff);
+ static const float bordercolor[]           = COLOR(0x444444ff);
+-static const float focuscolor[]            = COLOR(0xcba6f7ff);
++static float focuscolor[]                  = COLOR(0xcba6f7ff);
++static const char *focuscolorfile          = ".cache/colors/dwl";
+ static const float urgentcolor[]           = COLOR(0xff0000ff);
+ /* This conforms to the xdg-protocol. Set the alpha to zero to restore the old behavior */
+ static const float fullscreen_bg[]         = {0.0f, 0.0f, 0.0f, 1.0f}; /* You can also use glsl colors */
+--- a/dwl.c
++++ b/dwl.c
+@@ -1,6 +1,7 @@
+ /*
+  * See LICENSE file for copyright and license details.
+  */
++#include <errno.h>
+ #include <getopt.h>
+ #include <libinput.h>
+ #include <limits.h>
+@@ -313,6 +314,8 @@
+ static void focusstack(const Arg *arg);
+ static Client *focustop(Monitor *m);
+ static void fullscreennotify(struct wl_listener *listener, void *data);
++static int loadfocuscolor(void);
++static int reloadfocuscolor(int signal, void *data);
+ static void gpureset(struct wl_listener *listener, void *data);
+ static void handlesig(int signo);
+ static void incnmaster(const Arg *arg);
+@@ -394,6 +397,7 @@
+ static void *exclusive_focus;
+ static struct wl_display *dpy;
+ static struct wl_event_loop *event_loop;
++static struct wl_event_source *focuscolor_event;
+ static struct wlr_backend *backend;
+ static struct wlr_scene *scene;
+ static struct wlr_scene_tree *layers[NUM_LAYERS];
+@@ -835,6 +839,8 @@
+ void
+ cleanup(void)
+ {
++	if (focuscolor_event)
++		wl_event_source_remove(focuscolor_event);
+ 	cleanuplisteners();
+ #ifdef XWAYLAND
+ 	wlr_xwayland_destroy(xwayland);
+@@ -1731,6 +1737,55 @@
+ 		quit(NULL);
+ }
+ 
++static int
++loadfocuscolor(void)
++{
++	FILE *fp;
++	unsigned int color;
++	char path[PATH_MAX];
++	const char *home;
++
++	if (!(home = getenv("HOME")))
++		return 0;
++
++	if (snprintf(path, sizeof(path), "%s/%s", home, focuscolorfile)
++			>= (int)sizeof(path))
++		return 0;
++
++	if (!(fp = fopen(path, "r")))
++		return 0;
++
++	if (fscanf(fp, "%x", &color) != 1) {
++		fclose(fp);
++		return 0;
++	}
++	fclose(fp);
++
++	focuscolor[0] = ((color >> 24) & 0xff) / 255.0f;
++	focuscolor[1] = ((color >> 16) & 0xff) / 255.0f;
++	focuscolor[2] = ((color >> 8) & 0xff) / 255.0f;
++	focuscolor[3] = (color & 0xff) / 255.0f;
++
++	return 1;
++}
++
++int
++reloadfocuscolor(int signal, void *data)
++{
++	Client *c;
++
++	(void)signal;
++	(void)data;
++
++	if (!loadfocuscolor())
++		return 0;
++
++	if ((c = focustop(selmon)) && !c->isurgent)
++		client_set_border_color(c, focuscolor);
++
++	return 0;
++}
++
+ void
+ incnmaster(const Arg *arg)
+ {
+@@ -2792,6 +2847,13 @@
+ 	dpy = wl_display_create();
+ 	event_loop = wl_display_get_event_loop(dpy);
+ 
++	/* Load the runtime focus color if available; otherwise keep the default. */
++	loadfocuscolor();
++
++	if (!(focuscolor_event = wl_event_loop_add_signal(event_loop, SIGUSR1,
++			reloadfocuscolor, NULL)))
++		die("couldn't create focus color signal source");
++
+ 	/* The backend is a wlroots feature which abstracts the underlying input and
+ 	 * output hardware. The autocreate option will choose the most suitable
+ 	 * backend based on the current environment, such as opening an X11 window

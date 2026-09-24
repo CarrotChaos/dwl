@@ -1,7 +1,6 @@
 /*
  * See LICENSE file for copyright and license details.
  */
-#include <errno.h>
 #include <getopt.h>
 #include <libinput.h>
 #include <limits.h>
@@ -318,8 +317,6 @@ static void focusmon(const Arg *arg);
 static void focusstack(const Arg *arg);
 static Client *focustop(Monitor *m);
 static void fullscreennotify(struct wl_listener *listener, void *data);
-static int loadfocuscolor(void);
-static int reloadfocuscolor(int signal, void *data);
 static void gpureset(struct wl_listener *listener, void *data);
 static void handlesig(int signo);
 static void incnmaster(const Arg *arg);
@@ -401,7 +398,6 @@ static int locked;
 static Client *focused_client;
 static struct wl_display *dpy;
 static struct wl_event_loop *event_loop;
-static struct wl_event_source *focuscolor_event;
 static struct wlr_backend *backend;
 static struct wlr_scene *scene;
 static struct wlr_scene_tree *layers[NUM_LAYERS];
@@ -851,8 +847,6 @@ checkidleinhibitor(struct wlr_surface *exclude)
 void
 cleanup(void)
 {
-	if (focuscolor_event)
-		wl_event_source_remove(focuscolor_event);
 	cleanuplisteners();
 #ifdef XWAYLAND
 	wlr_xwayland_destroy(xwayland);
@@ -1770,55 +1764,6 @@ handlesig(int signo)
 		while (waitpid(-1, NULL, WNOHANG) > 0);
 	else if (signo == SIGINT || signo == SIGTERM)
 		quit(NULL);
-}
-
-static int
-loadfocuscolor(void)
-{
-	FILE *fp;
-	unsigned int color;
-	char path[PATH_MAX];
-	const char *home;
-
-	if (!(home = getenv("HOME")))
-		return 0;
-
-	if (snprintf(path, sizeof(path), "%s/%s", home, focuscolorfile)
-			>= (int)sizeof(path))
-		return 0;
-
-	if (!(fp = fopen(path, "r")))
-		return 0;
-
-	if (fscanf(fp, "%x", &color) != 1) {
-		fclose(fp);
-		return 0;
-	}
-	fclose(fp);
-
-	focuscolor[0] = ((color >> 24) & 0xff) / 255.0f;
-	focuscolor[1] = ((color >> 16) & 0xff) / 255.0f;
-	focuscolor[2] = ((color >> 8) & 0xff) / 255.0f;
-	focuscolor[3] = (color & 0xff) / 255.0f;
-
-	return 1;
-}
-
-int
-reloadfocuscolor(int signal, void *data)
-{
-	Client *c;
-
-	(void)signal;
-	(void)data;
-
-	if (!loadfocuscolor())
-		return 0;
-
-	if ((c = focustop(selmon)) && !c->isurgent)
-		client_set_border_color(c, focuscolor);
-
-	return 0;
 }
 
 void
@@ -2883,13 +2828,6 @@ setup(void)
 	 * clients from the Unix socket, managing Wayland globals, and so on. */
 	dpy = wl_display_create();
 	event_loop = wl_display_get_event_loop(dpy);
-
-	/* Load the runtime focus color if available; otherwise keep the default. */
-	loadfocuscolor();
-
-	if (!(focuscolor_event = wl_event_loop_add_signal(event_loop, SIGUSR1,
-			reloadfocuscolor, NULL)))
-		die("couldn't create focus color signal source");
 
 	/* The backend is a wlroots feature which abstracts the underlying input and
 	 * output hardware. The autocreate option will choose the most suitable

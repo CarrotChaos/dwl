@@ -1,0 +1,10 @@
+--- dwl.c
++++ dwl.c
+@@ -452,6 +469,7 @@ static struct wl_listener request_set_cursor_shape = {.notify = setcursorshape};
+ static struct wl_listener request_start_drag = {.notify = requeststartdrag};
+ static struct wl_listener start_drag = {.notify = startdrag};
+ static struct wl_listener new_session_lock = {.notify = locksession};
++static int resizelock = 0;   /* do not actually resize during arrange */
+ 
+ #ifdef XWAYLAND
+ static void activatex11(struct wl_listener *listener, void *data);
