@@ -132,7 +132,10 @@ static const char *powermenu[] = {
     "sh", "-c", "$HOME/scripts/power-menu.sh", NULL
 };
 static const char *passmenu[] = {
-	"sh", "-c", "exec \"$HOME/scripts/pass-type\"", NULL
+	"sh", "-c", "exec \"$HOME/scripts/pass-type.sh\"", NULL
+};
+static const char *mountmenu[] = {
+	"sh", "-c", "exec \"$HOME/scripts/mount.sh\"", NULL
 };
 static const char *up_vol[] = {
 	"sh", "-c", "exec \"$HOME/scripts/volume-scripts/volup.sh\"", NULL
@@ -143,8 +146,15 @@ static const char *down_vol[] = {
 static const char *mute_vol[] = {
 	"sh", "-c", "exec \"$HOME/scripts/volume-scripts/volmute.sh\"", NULL
 };
-static const char *brightness_up[] = {"brightnessctl", "set", "+5%", NULL};
-static const char *brightness_down[] = {"brightnessctl", "set", "5%-", NULL};
+static const char *brightness_up[] = {
+    "sh", "-c", "brightnessctl set +5% >/dev/null && brightnessctl get > \"$HOME/.cache/brightness_level\"",
+    NULL
+};
+static const char *brightness_down[] = {
+    "sh", "-c", "brightnessctl set 5%- >/dev/null && brightnessctl get > \"$HOME/.cache/brightness_level\"",
+    NULL
+};
+
 
 static const Key keys[] = {
 	/* modifier                  key                  function          argument */
@@ -155,6 +165,7 @@ static const Key keys[] = {
 	{ 0, XKB_KEY_XF86MonBrightnessDown, spawn, {.v = brightness_down } },
 	{ WLR_MODIFIER_CTRL|WLR_MODIFIER_ALT, XKB_KEY_Delete, spawn, {.v = powermenu} },
 	{ WLR_MODIFIER_CTRL|WLR_MODIFIER_SHIFT, XKB_KEY_x, spawn, {.v = passmenu} },
+	{ MODKEY,		     XKB_KEY_u, spawn, {.v = mountmenu} },
 	{ MODKEY,                    XKB_KEY_d,           spawn,            {.v = menucmd} },
 	{ MODKEY,		     XKB_KEY_Return,      spawn,            {.v = termcmd} },
 	{ MODKEY,                    XKB_KEY_j,           focusstack,       {.i = +1} },
